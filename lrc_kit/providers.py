@@ -112,9 +112,9 @@ class Music163Provider(LyricsProvider):
             'offset': 0,
             's': search_request.as_string
         }
-        resp = requests.get(search_url, params=search_params).json()['result']['songs']
-        if len(resp) > 0:
-            for song in resp:
+        resp = requests.get(search_url, params=search_params).json()['result']
+        if resp.get('songs') and len(resp['songs']) > 0:
+            for song in resp['songs']:
                 if song['name'].lower() == search_request.song and song['artists'][0]['name'].lower() == search_request.artist:
                     return song['id']
         return None
@@ -145,7 +145,7 @@ class SogeciProvider(LyricsProvider):
                 
         return None
     def fetch(self, lyric_url):
-        lyric_regex = re.compile('<pre>([\s\S]*?)</pre>')
+        lyric_regex = re.compile(r'<pre>([\s\S]*?)</pre>')
         lyric_page = requests.get(lyric_url).text
         lyrics = re.search(lyric_regex, lyric_page).group(1)
         return lyrics.strip()

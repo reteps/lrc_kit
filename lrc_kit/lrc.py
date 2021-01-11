@@ -16,7 +16,9 @@ class LRC:
     def export(self, fp_or_str):
         if isinstance(fp_or_str, str):
             fp = open(fp_or_str, 'w')
-        str_lyrics = '\n'.join(str(l) for l in self.lyrics)
         str_metadata = '\n'.join(f'[{key}:{value}]' for key, value in self.metadata.items()) + '\n'
         fp.write(str_metadata)
-        fp.write(str_lyrics)
+        fp.write(self.lyric_str)
+    @property
+    def lyric_str(self):
+        return '\n'.join(str(l) for l in self.lyrics)
