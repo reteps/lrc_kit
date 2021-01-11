@@ -1,10 +1,9 @@
-from lyrics.parser import parse_lyrics
+from lrc_kit.parser import parse_lyrics
 import json
 
 class LRC:
     def __init__(self, lyrics, metadata={}):
         if isinstance(lyrics, str):
-            print(lyrics)
             self.lyrics, self.metadata = parse_lyrics(lyrics)
         else:
             self.lyrics = lyrics
@@ -18,7 +17,6 @@ class LRC:
         if isinstance(fp_or_str, str):
             fp = open(fp_or_str, 'w')
         str_lyrics = '\n'.join(str(l) for l in self.lyrics)
-        print(self.metadata)
         str_metadata = '\n'.join(f'[{key}:{value}]' for key, value in self.metadata.items()) + '\n'
         fp.write(str_metadata)
         fp.write(str_lyrics)

@@ -1,4 +1,4 @@
-from lyrics.line import LyricLine
+from lrc_kit.line import LyricLine
 import re
 
 line_regex = re.compile(r'\[(?:(\d+):)?(\d+)(?:\.(\d+))?\]([^\[]+)')
@@ -14,7 +14,6 @@ def parse_lyrics(lyrics):
     for match in line_matches:
         times = map(lambda x: dirty_int(x), match[:3])
         parsed_lines.append(LyricLine(match[3].strip(), *times))
-        # print(match)
     metadata = {}
     for match in metadata_matches:
         metadata[match[0]] = match[1]

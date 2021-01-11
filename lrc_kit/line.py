@@ -20,7 +20,7 @@ class LyricLine:
         return self.time_millis / 1000
     @property
     def time_millis(self):
-        return to_millis(self.min, self.sec, self.millis)
+        return self.to_millis(self.min, self.sec, self.millis)
         
     @staticmethod
     def to_time(millis):

@@ -7,7 +7,7 @@ import base64
 import zlib
 import json
 from abc import abstractmethod
-from lyrics.lrc import LRC
+from lrc_kit.lrc import LRC
 # https://github.com/ddddxxx/LyricsKit/tree/master/Sources/LyricsService/Provider
 # https://github.com/blueset/project-lyricova/tree/master/packages/lyrics-kit
 class LyricsProvider:
@@ -116,7 +116,6 @@ class Music163Provider(LyricsProvider):
         if len(resp) > 0:
             for song in resp:
                 if song['name'].lower() == search_request.song and song['artists'][0]['name'].lower() == search_request.artist:
-                    print(song)
                     return song['id']
         return None
     def fetch(self, song_id):
@@ -247,7 +246,6 @@ class RentanaAdvisorProvider(LyricsProvider):
         for result_link in result_links:
             if result_link["href"] != "subtitles4songs.aspx":
                 lower_title = result_link.get_text().lower()
-                print(lower_title)
                 if search_request.artist.lower() in lower_title and search_request.song.lower() in lower_title:
                     url = "https://www.rentanadviser.com/en/subtitles/%s&type=lrc" % result_link["href"]
                     return url
