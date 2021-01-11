@@ -1,0 +1,27 @@
+Metadata-Version: 2.1
+Name: lrc-kit
+Version: 0.1
+Summary: A library to search for LRC files online and parse their contents
+Home-page: https://github.com/reteps/lrc_kit
+Author: Peter Stenger
+Author-email: peter.promotions.stenger@gmail.com
+License: UNKNOWN
+Description: # lrc_kit
+        
+        A very simple API for searching for LRC files in python
+        
+        ```python3
+        from lrc_kit import ComboLyricProvider, SearchRequest
+        
+        engine = ComboLyricProvider()
+        search = SearchRequest('eminem', 'stan')
+        result, engine_used = engine.search(search)
+        result.export('stan.lrc')
+        ```
+        
+Platform: UNKNOWN
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown

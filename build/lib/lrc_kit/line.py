@@ -15,13 +15,6 @@ class LyricLine:
     @staticmethod
     def to_millis(m,s,mi):
         return m * 60 * 1000 + s * 1000 + mi
-    @property
-    def time_seconds(self):
-        return self.time_millis / 1000
-    @property
-    def time_millis(self):
-        return to_millis(self.min, self.sec, self.millis)
-        
     @staticmethod
     def to_time(millis):
         sign = 1
