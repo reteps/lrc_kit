@@ -7,7 +7,7 @@ import base64
 import zlib
 import json
 from abc import abstractmethod
-from lrc_kit.lrc import LRC
+from lrc_kit.lyrics import Lyrics
 import logging
 # https://github.com/ddddxxx/LyricsKit/tree/master/Sources/LyricsService/Provider
 # https://github.com/blueset/project-lyricova/tree/master/packages/lyrics-kit
@@ -30,9 +30,10 @@ class LyricsProvider:
             if val:
                 lrc = self.fetch(val)
                 lrc.metadata['provider'] = self.name
-                lrc.metadata['fetch'] = val
                 logging.info(meta)
                 lrc.metadata = {**meta, **lrc.metadata}
+                if 'fetch' not in lrc.metadata:
+                    lrc.metadata['fetch'] = val
                 return lrc
             return None
         except Exception as e:
@@ -86,10 +87,13 @@ class KugouProvider(LyricsProvider):
         logging.debug(f'{len(data.get("candidates", []))} ({self.name}) results')
         if data['candidates']:
             c = data['candidates'][0]
-            return (c['id'], c['accesskey'], c['song'], c['singer'])
+            return (c['id'], c['accesskey']), {
+                'ti': c['song'],
+                'ar': c['singer']
+            }
         return None, None
     def fetch(self, token):
-        token_id, token_key, _, _ = token
+        token_id, token_key = token
         params = {
             "id": token_id,
             "accesskey": token_key,
@@ -99,7 +103,8 @@ class KugouProvider(LyricsProvider):
             "ver": 1,
         }
         data = self.session.get('http://lyrics.kugou.com/download', params=params).json()['content']
-        return self.decode_krc(base64.b64decode(data))
+        # logging.info(self.decode_krc(base64.b64decode(data)))
+        return Lyrics(self.decode_krc(base64.b64decode(data)), kind='krc')
     def decode_krc(self, krc):
         byte_krc = bytearray(krc)
         if byte_krc[:4] != b'krc1':
@@ -145,7 +150,9 @@ class XiamiProvider(LyricsProvider):
     def fetch(self, lrc_url):
         lyric_text = self.session.get(lrc_url).text
         logging.debug('FETCHING Xiami')
-        lyrics = LRC(lyric_text)
+        extension = lrc_url.split('.')[-1]
+        logging.debug(f'Xiami KIND {extension}')
+        lyrics = Lyrics(lyric_text, kind=extension)
         return lyrics
 class QQProvider(LyricsProvider):
     name = 'QQ'
@@ -179,7 +186,7 @@ class QQProvider(LyricsProvider):
         if body.get('lyric'):
             lyric_text = base64.b64decode(body['lyric']).decode('utf-8')
             logging.debug(lyric_text)
-            return LRC(lyric_text)
+            return Lyrics(lyric_text)
         return None
 
 class GecimiLyricProvider(LyricsProvider):
@@ -198,7 +205,7 @@ class GecimiLyricProvider(LyricsProvider):
 
     def fetch(self, lrc_url):
         lyric_text = self.session.get(lrc_url).text
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 class Music163Provider(LyricsProvider):
     name = 'Music163'
     def raw_search(self, search_request):
@@ -235,7 +242,7 @@ class Music163Provider(LyricsProvider):
         l_resp = self.session.get(lyric_url, params=lyric_params).json()
         lyric_text = l_resp['lrc']['lyric']
         # TODO klyric support
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 class SogeciProvider(LyricsProvider):
     name = 'Sogeci'
     def raw_search(self, search_request):
@@ -260,7 +267,7 @@ class SogeciProvider(LyricsProvider):
         lyric_page = self.session.get(lyric_url).text
         lyrics = re.search(lyric_regex, lyric_page).group(1)
         lyric_text = lyrics.strip()
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 
 class SyairProvider(LyricsProvider):
     name = 'Syair'
@@ -290,7 +297,7 @@ class SyairProvider(LyricsProvider):
         lyric_regex = re.compile(r'<div class=\"entry\">.*?<\/p>([\s\S]+?)}?<div')
         match = re.search(lyric_regex, lyrics_page).group(1)
         lyric_text = match.replace('<br>','')
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 class MooflacProvider(LyricsProvider):
     name = 'mooflac'
     def get_cookie_jar(self):
@@ -318,7 +325,7 @@ class MooflacProvider(LyricsProvider):
         lrc_text = '\n'.join([html.unescape(line.split('<br>')[0]) for line in lyrics.group(1).split('\n')])
         if '[' not in lrc_text and ']' not in lrc_text:
             return None
-        return LRC(lrc_text)
+        return Lyrics(lrc_text)
     def raw_search(self, search_request):
 
         search_page = self.session.get('https://www.mooflac.com/search', params={
@@ -371,7 +378,7 @@ class RentanaAdvisorProvider(LyricsProvider):
                                     "__EVENTVALIDATION": event_validation,
                                     "__VIEWSTATE": view_state}).text
 
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 
 class MegalobizProvider(LyricsProvider):
     name = "Megalobiz"
@@ -396,7 +403,7 @@ class MegalobizProvider(LyricsProvider):
         soup = BeautifulSoup(possible_text.text, 'html.parser')
 
         lyric_text = soup.find("div", class_="lyrics_details").span.get_text()
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 
 
 class LyricFindProvider(LyricsProvider):
@@ -432,7 +439,7 @@ class LyricFindProvider(LyricsProvider):
         lyric_text = '\n'.join(
             line['lrc_timestamp'] + line['line'] for line in filter(lambda x:len(x['line'])>0, lrc_object)
         )
-        return LRC(lyric_text)
+        return Lyrics(lyric_text)
 
 PROVIDERS = [
     SogeciProvider,
@@ -440,8 +447,10 @@ PROVIDERS = [
     QQProvider, 
     Music163Provider,
     SyairProvider,
+    LyricFindProvider,
+    MooflacProvider,
     RentanaAdvisorProvider,
-    MegalobizProvider
+    MegalobizProvider,
 ]
 
-# MooflacProvider, LyricFindProvider, KugouProvider
+# KugouProvider,

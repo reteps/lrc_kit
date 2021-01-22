@@ -1,10 +1,11 @@
 from lrc_kit.parser import parse_lyrics
 import json
 
-class LRC:
-    def __init__(self, lyrics, metadata={}):
+class Lyrics:
+    def __init__(self, lyrics, metadata={}, kind='lrc'):
+        self.kind = metadata.pop('kind', kind)
         if isinstance(lyrics, str):
-            self.lyrics, self.metadata = parse_lyrics(lyrics)
+            self.lyrics, self.metadata = parse_lyrics(lyrics, kind)
         else:
             self.lyrics = lyrics
             self.metadata = metadata
@@ -12,9 +13,12 @@ class LRC:
     def offset(self, minutes=0, seconds=0, milliseconds=0):
         for line in self.lyrics:
             line.offset(min_offset=minutes, sec_offset=seconds, millis_offset=milliseconds)
-    
-    def export(self, fp_or_str):
+
+    def export(self, fp_or_str, extension=None):
         if isinstance(fp_or_str, str):
+            if extension is None:
+                extension = '.' + self.kind
+                fp_or_str += extension
             fp = open(fp_or_str, 'w')
         str_metadata = '\n'.join(f'[{key}:{value}]' for key, value in self.metadata.items()) + '\n'
         fp.write(str_metadata)
