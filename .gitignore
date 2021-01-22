@@ -1,3 +1,4 @@
 lrc_kit.egg-info/
 build/
 __pycache__/
+tests/files/

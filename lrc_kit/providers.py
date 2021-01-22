@@ -8,28 +8,42 @@ import zlib
 import json
 from abc import abstractmethod
 from lrc_kit.lrc import LRC
+import logging
 # https://github.com/ddddxxx/LyricsKit/tree/master/Sources/LyricsService/Provider
 # https://github.com/blueset/project-lyricova/tree/master/packages/lyrics-kit
 class LyricsProvider:
-    service = ''
-    UA = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.101 Safari/537.36'}
-
+    user_agent = {'user-agent': 'lrc_kit'}
+    def __init__(self, session=None):
+        if session is None:
+            session = requests.Session()
+        self.session = session
     @abstractmethod
-    def search(self, search_request):
+    def raw_search(self, search_request):
         pass
     @abstractmethod
     def fetch(self, input):
-        pass
-    def search_and_fetch(self, search_request):
-        val = self.search(search_request)
-        if val:
-            return self.fetch(val)
-        return val
+        raise NotImplementedError()
+    def search(self, search_request):
+        logging.debug(self.name + ' ' + search_request.as_string)
+        try:
+            val, meta = self.raw_search(search_request)
+            if val:
+                lrc = self.fetch(val)
+                lrc.metadata['provider'] = self.name
+                lrc.metadata['fetch'] = val
+                logging.info(meta)
+                lrc.metadata = {**meta, **lrc.metadata}
+                return lrc
+            return None
+        except Exception as e:
+            logging.error(e)
+            raise e
+        return None
 
 class SearchRequest:
     def __init__(self, artist, song, duration=None):
-        self.artist = artist
-        self.song = song
+        self.artist = artist.lower()
+        self.song = song.lower()
         self.duration = duration
     @property
     def as_string(self):
@@ -41,21 +55,25 @@ class SearchRequest:
     def song_normalized(self):
         return ' '.join(re.sub(r'\W+',' ', self.song).split(' '))
 
-class ComboLyricProvider(LyricsProvider):
-    def __init__(self, text_providers=None):
+class ComboLyricsProvider(LyricsProvider):
+    name = "Combo"
+    def __init__(self, text_providers=None, **kwargs):
+        self.kwargs = kwargs
+        super().__init__(self.kwargs)
         if text_providers == None:
             self.providers = PROVIDERS
         else:
             self.providers = [provider for provider in PROVIDERS if provider.name in text_providers]
     def search(self, search_request):
         for provider in self.providers:
-            res = provider().search_and_fetch(search_request)
+            logging.info(provider.name)
+            res = provider(**self.kwargs).search(search_request)
             if res:
-                return LRC(res), provider.name
-        return None, None
+                return res
+        return None
 class KugouProvider(LyricsProvider):
     name = "Kugou"
-    def search(self, search_request):
+    def raw_search(self, search_request):
         params = {
             'keyword': search_request.as_string,
             'client': 'pc',
@@ -64,12 +82,12 @@ class KugouProvider(LyricsProvider):
         }
         if search_request.duration:
             params['duration'] = search_request.duration
-        data = requests.get('http://lyrics.kugou.com/search', params=params).json()
-
+        data = self.session.get('http://lyrics.kugou.com/search', params=params).json()
+        logging.debug(f'{len(data.get("candidates", []))} ({self.name}) results')
         if data['candidates']:
             c = data['candidates'][0]
             return (c['id'], c['accesskey'], c['song'], c['singer'])
-        return None
+        return None, None
     def fetch(self, token):
         token_id, token_key, _, _ = token
         params = {
@@ -80,7 +98,7 @@ class KugouProvider(LyricsProvider):
             "client": "pc",
             "ver": 1,
         }
-        data = requests.get('http://lyrics.kugou.com/download', params=params).json()['content']
+        data = self.session.get('http://lyrics.kugou.com/download', params=params).json()['content']
         return self.decode_krc(base64.b64decode(data))
     def decode_krc(self, krc):
         byte_krc = bytearray(krc)
@@ -91,20 +109,99 @@ class KugouProvider(LyricsProvider):
         for i in range(len(byte_krc)):
             byte_krc[i] ^= decode_bytes[i & 0b1111]
         
-        final = zlib.decompress(byte_krc)
-        return final.decode('utf-8')
+        lyric_text = zlib.decompress(byte_krc).decode('utf-8')
+        logging.debug(lyric_text)
+        return lyric_text
+
+class XiamiProvider(LyricsProvider):
+    name = 'Xiami'
+    def raw_search(self, search_request):
+        params = {
+            'key': search_request.as_string,
+            'limit': 10,
+            'r': 'search/songs',
+            'app_key': 1
+        }
+        headers = {
+            'Referer': 'http://h.xiami.com/'
+        }
+        body = self.session.get('http://api.xiami.com/web', params=params, headers=headers).json()['data']
+        logging.debug(f'{len(body.get("songs", []))} ({self.name}) results')
+
+        for result in body['songs']:
+            artist = result['artist_name']
+            song = result['song_name']
+            success = artist.lower() == search_request.artist and song.lower() == search_request.song and result['lyric']
+            logging.debug(f'{artist} {song} {success}')
+            if artist.lower() == search_request.artist and song.lower() == search_request.song and result['lyric']:
+                metadata = {
+                    'ar': artist,
+                    'ti': song,
+                    'al': result['album_name'],
+                    'cover': result['album_logo'].replace('\\/', '/')
+                }
+                return result['lyric'].replace('\\/', '/'), metadata
+        return None, None
+    def fetch(self, lrc_url):
+        lyric_text = self.session.get(lrc_url).text
+        logging.debug('FETCHING Xiami')
+        lyrics = LRC(lyric_text)
+        return lyrics
+class QQProvider(LyricsProvider):
+    name = 'QQ'
+    def raw_search(self, search_request):
+        params = {
+            'w': search_request.as_string
+        }
+        body = json.loads(self.session.get('https://c.y.qq.com/soso/fcgi-bin/client_search_cp', params=params).text[9:-1])['data']
+        logging.debug(f'{len(body["song"]["list"])} ({self.name}) results')
+
+        for song in body['song']['list']:
+            name = song['songname']
+            artist = song['singer'][0]['name']
+            if search_request.song == name.lower() and search_request.artist == artist.lower():
+                metadata = {
+                    'ti': name,
+                    'ar': artist,
+                    'al': song['albumname']
+                }
+                return song['songmid'], metadata
+        return None, None
+    def fetch(self, song_id):
+        params = {
+            'songmid': song_id,
+            'g_tk': 5381
+        }
+        headers = {
+            'Referer': 'y.qq.com/portal/player.html'
+        }
+        body = json.loads(self.session.get('https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg', params=params, headers=headers).text[18:-1])
+        if body.get('lyric'):
+            lyric_text = base64.b64decode(body['lyric']).decode('utf-8')
+            logging.debug(lyric_text)
+            return LRC(lyric_text)
+        return None
+
 class GecimiLyricProvider(LyricsProvider):
     name = 'Gecimi'
-    def search(self, search_request):
+    def raw_search(self, search_request):
         # http://gecimi.com/api/lyric/%E6%B5%B7%E9%98%94%E5%A4%A9%E7%A9%BA/Beyond
-        # Getting error: dial tcp 127.0.0.1:3306: connect: connection refused
-        raise NotImplementedError()
-        requests.get('http://gecimi.com/api/lyric/{song}/artist')
-    def fetch(self, input):
-        raise NotImplementedError()
+        songs = self.session.get('http://gecimi.com/api/lyric/{search_request.song}/{search_request.artist}').json()['result']
+        logging.debug(f'{len(songs)} ({self.name}) results')
+        for s in songs:
+            song = s['song']
+            if song.lower() == search_request.song:
+                return s['lrc'], {
+                    'ti': s['song']
+                }
+        return None, None
+
+    def fetch(self, lrc_url):
+        lyric_text = self.session.get(lrc_url).text
+        return LRC(lyric_text)
 class Music163Provider(LyricsProvider):
     name = 'Music163'
-    def search(self, search_request):
+    def raw_search(self, search_request):
         search_url = 'http://music.163.com/api/search/pc'
         search_params = {
             'limit': 10,
@@ -112,87 +209,93 @@ class Music163Provider(LyricsProvider):
             'offset': 0,
             's': search_request.as_string
         }
-        resp = requests.get(search_url, params=search_params).json()['result']
+        resp = self.session.get(search_url, params=search_params).json()['result']
+        logging.debug(f'{len(resp.get("songs", []))} ({self.name}) results')
         if resp.get('songs') and len(resp['songs']) > 0:
-            for song in resp['songs']:
-                if song['name'].lower() == search_request.song and song['artists'][0]['name'].lower() == search_request.artist:
-                    return song['id']
-        return None
+            for result in resp['songs']:
+                song = result['name']
+                artist = result['artists'][0]['name']
+                if song.lower() == search_request.song and artist.lower() == search_request.artist:
+                    metadata = {
+                        'ti': song,
+                        'ar': artist,
+                        'al': result['album']['name'],
+                        'cover': result['album']['picUrl']
+                    }
+                    return result['id'], metadata
+        return None, None
     def fetch(self, song_id):
-        lyric_url = 'http://music.163.com/api/song/lyric?id=1300287&lv=1&kv=1&tv=-1'
+        lyric_url = 'http://music.163.com/api/song/lyric'
         lyric_params = {
             'id': song_id,
             'lv': 1,
             'kv': 1,
             'tv': -1
         }
-        l_resp = requests.get(lyric_url, params=lyric_params).json()
-        return l_resp['lrc']['lyric']
+        l_resp = self.session.get(lyric_url, params=lyric_params).json()
+        lyric_text = l_resp['lrc']['lyric']
+        # TODO klyric support
+        return LRC(lyric_text)
 class SogeciProvider(LyricsProvider):
     name = 'Sogeci'
-    def search(self, search_request):
+    def raw_search(self, search_request):
         artist_fixed = re.sub(r'\W+', '', search_request.artist)
         artist_page = f'http://www.sogeci.net/geshou/{artist_fixed}.html'
-        page = requests.get(artist_page)
+        page = self.session.get(artist_page)
         if page.status_code == 404:
-            return None
+            return None, None
         soup = BeautifulSoup(page.text, 'lxml')
         links = soup.find('div', class_='showNewSong')
         links = links.find_all('a')
+        logging.debug(f'{len(links)} ({self.name}) results')
         for link in links:
-            if link['title'].lower() in search_request.song.lower():
-                return 'http://www.sogeci.net' + link['href']
+            if link['title'].lower() == search_request.song:
+                return 'http://www.sogeci.net' + link['href'], {
+                    'ti': link['title']
+                }
                 
-        return None
+        return None, None
     def fetch(self, lyric_url):
         lyric_regex = re.compile(r'<pre>([\s\S]*?)</pre>')
-        lyric_page = requests.get(lyric_url).text
+        lyric_page = self.session.get(lyric_url).text
         lyrics = re.search(lyric_regex, lyric_page).group(1)
-        return lyrics.strip()
+        lyric_text = lyrics.strip()
+        return LRC(lyric_text)
+
 class SyairProvider(LyricsProvider):
     name = 'Syair'
-    def search(self, search_request):
-        search_page = requests.get("https://www.syair.info/search", params={
+    def raw_search(self, search_request):
+        search_page = self.session.get("https://www.syair.info/search", params={
         "q": f'{search_request.artist_normalized} {search_request.song}'
-        }, headers = self.UA).text
-        soup = BeautifulSoup(search_page, 'lxml')
-        result_container = soup.find("div", class_="sub")
-        if result_container:
-            result_list = result_container.find_all("div", class_="li")
-
-            if result_list:
-                for i, li in enumerate(result_list):
-                    result = li.find('a')
-                    name = result.text.lower()
-                    if (search_request.artist.lower() in name or search_request.artist_normalized.lower() in name) and search_request.song.lower() in name:
-                        url = "https://www.syair.info"
-                        if '[offset:' in li.text:
-                            # check next one just in case
-                            next_link = result_list[i+1].find('a')
-                            if next_link.text.lower() == name:
-                                url += next_link['href']
-                            else:
-                                url += result['href']
-                        else:
-                            url += result['href']
-                        return url
-        return None
+        }, headers = self.user_agent).text
+        result_regex = re.compile(r'href=\"([^\"]+)\" target=\"_blank\" class=\"title\">([^<]+)<\/a><br>([^<]+)')
+        results = re.findall(result_regex, search_page)
+        best_result = (None, None)
+        for result in results:
+            href = result[0]
+            text = result[1]
+            lrc_preview = result[2]
+            artist, song = text.replace('.lrc','').strip().split(' - ')
+            if (search_request.artist == artist.lower() or search_request.artist_normalized == artist.lower()) and search_request.song == song.lower():
+                metadata = {
+                    'ar': artist,
+                    'ti': song
+                }
+                best_result = ("https://www.syair.info" + href, metadata)
+                if '[offset' not in lrc_preview:
+                    break
+        return best_result
     def fetch(self, lyric_url):
-        lyrics_page = requests.get(lyric_url, headers = self.UA)
-        soup = BeautifulSoup(lyrics_page.text, 'lxml')
-        lrc_link = None
-        for download_link in soup.find_all("a", attrs={"rel": "nofollow"}):
-            if "download.php" in download_link["href"]:
-                lrc_link = "https://www.syair.info" + download_link["href"]
-                return requests.get(lrc_link,
-                                    cookies=lyrics_page.cookies, headers = self.UA).text
-        return None
+        lyrics_page = self.session.get(lyric_url, headers=self.user_agent).text
+        lyric_regex = re.compile(r'<div class=\"entry\">.*?<\/p>([\s\S]+?)}?<div')
+        match = re.search(lyric_regex, lyrics_page).group(1)
+        lyric_text = match.replace('<br>','')
+        return LRC(lyric_text)
 class MooflacProvider(LyricsProvider):
     name = 'mooflac'
-    @staticmethod
-    def get_cookie_jar():
+    def get_cookie_jar(self):
         login_url = 'https://www.mooflac.com/login'
-        res = requests.get(login_url)
+        res = self.session.get(login_url)
         token_re = re.compile(r'name="_token" value="(.*)"')
         token = re.search(token_re, res.text).group(1)
 
@@ -206,92 +309,101 @@ class MooflacProvider(LyricsProvider):
         super().__init__()
         self.cookies = self.get_cookie_jar()
     def fetch(self, url):
-        lyrics_page = requests.get(url, cookies=self.cookies).text
+        lyrics_page = self.session.get(url, cookies=self.cookies).text
         has_lyrics = 'lyric-context' in lyrics_page
         if not has_lyrics:
             return None
         lyrics_re = re.compile(r'<div class="hidden" id="lyric-context">([\s\S]*?)</div>')
         lyrics = re.search(lyrics_re, lyrics_page)
-        lyrics = '\n'.join([html.unescape(line.split('<br>')[0]) for line in lyrics.group(1).split('\n')])
-        if '[' not in lyrics and ']' not in lyrics:
+        lrc_text = '\n'.join([html.unescape(line.split('<br>')[0]) for line in lyrics.group(1).split('\n')])
+        if '[' not in lrc_text and ']' not in lrc_text:
             return None
-        return lyrics
-    def search(self, search_request):
+        return LRC(lrc_text)
+    def raw_search(self, search_request):
 
-        search_page = requests.get('https://www.mooflac.com/search', params={
+        search_page = self.session.get('https://www.mooflac.com/search', params={
             'q': search_request.song + ' ' + search_request.artist_normalized 
         }, cookies=self.cookies).text
         soup = BeautifulSoup(search_page, 'lxml')
         result_table = soup.find('tbody')
         if result_table:
-            for result in result_table.find_all('tr')[:10]:
+            results = result_table.find_all('tr')[:10]
+            logging.debug(f'{len(results)} ({self.name}) results')
+            for result in results:
                 links = result.find_all('td')
                 href = links[0].find('a')['href']
                 text = [unicodedata.normalize("NFKD", l.text.strip()) for l in links]
-                res_song = text[0].lower()
-                res_artist = text[1].lower()
-                if search_request.song.lower() == res_song and (search_request.artist_normalized.lower() == res_artist or search_request.artist.lower() == res_artist):
-                    return href
-        return None
+                song = text[0]
+                artist = text[1]
+                if search_request.song == song.lower() and (search_request.artist_normalized == artist.lower() or search_request.artist == artist.lower()):
+                    return href, {
+                        'ti': song,
+                        'ar': artist
+                    }
+        return None, None
 
 class RentanaAdvisorProvider(LyricsProvider):
     name = "RentAnAdviser"
-    def search(self, search_request):
+    def raw_search(self, search_request):
 
-        search_results = requests.get("https://www.rentanadviser.com/en/subtitles/subtitles4songs.aspx", 
+        search_results = self.session.get("https://www.rentanadviser.com/en/subtitles/subtitles4songs.aspx", 
             params={'src': search_request.as_string})
         soup = BeautifulSoup(search_results.text, 'html.parser')
         result_links = soup.find(id="tablecontainer").find_all("a")
+        logging.debug(f'{len(result_links)} ({self.name}) results')
 
         for result_link in result_links:
-            if result_link["href"] != "subtitles4songs.aspx":
+            href = result_link["href"]
+            if href != "subtitles4songs.aspx":
                 lower_title = result_link.get_text().lower()
-                if search_request.artist.lower() in lower_title and search_request.song.lower() in lower_title:
-                    url = "https://www.rentanadviser.com/en/subtitles/%s&type=lrc" % result_link["href"]
-                    return url
-        return None
+                if search_request.artist in lower_title and search_request.song in lower_title:
+                    url = f"https://www.rentanadviser.com/en/subtitles/{href}&type=lrc" 
+                    return (url, {})
+        return None, None
     def fetch(self, lyric_url):
-        possible_text = requests.get(lyric_url)
+        possible_text = self.session.get(lyric_url)
         soup = BeautifulSoup(possible_text.text, 'html.parser')
 
         event_validation = soup.find(id="__EVENTVALIDATION")["value"]
         view_state = soup.find(id="__VIEWSTATE")["value"]
 
-        lrc = requests.post(lyric_url, {"__EVENTTARGET": "ctl00$ContentPlaceHolder1$btnlyrics",
+        lyric_text = requests.post(lyric_url, {"__EVENTTARGET": "ctl00$ContentPlaceHolder1$btnlyrics",
                                     "__EVENTVALIDATION": event_validation,
                                     "__VIEWSTATE": view_state}).text
 
-        return lrc
+        return LRC(lyric_text)
 
 class MegalobizProvider(LyricsProvider):
     name = "Megalobiz"
-    def search(self, search_request):
-        search_results = requests.get("https://www.megalobiz.com/search/all", params={
-        "qry": search_request.as_string,
-        "display": "more"
+    def raw_search(self, search_request):
+        search_results = self.session.get("https://www.megalobiz.com/search/all", params={
+            "qry": search_request.as_string,
+            "display": "more"
         })
         soup = BeautifulSoup(search_results.text, 'html.parser')
         result_links = soup.find(id="list_entity_container").find_all("a", class_="entity_name")
+        logging.debug(f'{len(result_links)} ({self.name}) results')
 
         for result_link in result_links:
             lower_title = result_link.get_text().lower()
-            if search_request.artist.lower() in lower_title and search_request.song.lower() in lower_title:
-                url = "https://www.megalobiz.com%s" % result_link["href"]
-                return url
-        return None
+            if search_request.artist in lower_title and search_request.song in lower_title:
+                url = "https://www.megalobiz.com" + result_link["href"]
+                return url, {}
+        return None, None
 
     def fetch(self, url):
-        possible_text = requests.get(url)
+        possible_text = self.session.get(url)
         soup = BeautifulSoup(possible_text.text, 'html.parser')
 
-        lrc = soup.find("div", class_="lyrics_details").span.get_text()
-        return lrc
+        lyric_text = soup.find("div", class_="lyrics_details").span.get_text()
+        return LRC(lyric_text)
+
 
 class LyricFindProvider(LyricsProvider):
     name = "LyricFind"
     # https://github.com/alan96320/camocist-radio/blob/7adcc4f0482b395d97ce296745fb475be7f98052/app/Http/Controllers/Frontend/ApiController.php#L141
     # TODO retain lost metadata
-    def search(self, search_request):
+    def raw_search(self, search_request):
         base_params = {
             'apikey': 'ac0974dcf282f1c67c64342159e42c05',
             'reqtype': 'default',
@@ -304,13 +416,32 @@ class LyricFindProvider(LyricsProvider):
             'trackid': f'artistname:{search_request.artist},trackname:{search_request.song}'
         }
         requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += 'HIGH:!DH:!aNULL'
-        res = requests.get('https://api.lyricfind.com/lyric.do', {**base_params, **query}).json()
+        res = self.session.get('https://api.lyricfind.com/lyric.do', params={**base_params, **query}).json()
 
         if res.get('track') and res['track'].get('has_lrc'):
-            return res['track']['lrc']
-        return None
+            logging.debug(f'1 {self.name}')
+            return res['track']['lrc'], {
+                'fetch': res['track']['lfid'],
+                'ti': res['track']['title'],
+                'ar': res['track']['artist']['name'],
+                'length': res['track']['duration'],
+                'au': res['track']['writer']
+            }
+        return None, None
     def fetch(self, lrc_object):
-        return '\n'.join(
+        lyric_text = '\n'.join(
             line['lrc_timestamp'] + line['line'] for line in filter(lambda x:len(x['line'])>0, lrc_object)
         )
-PROVIDERS = [SogeciProvider, LyricFindProvider, Music163Provider, RentanaAdvisorProvider, MegalobizProvider, MooflacProvider, SyairProvider]
+        return LRC(lyric_text)
+
+PROVIDERS = [
+    SogeciProvider,
+    XiamiProvider,
+    QQProvider, 
+    Music163Provider,
+    SyairProvider,
+    RentanaAdvisorProvider,
+    MegalobizProvider
+]
+
+# MooflacProvider, LyricFindProvider, KugouProvider

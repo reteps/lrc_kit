@@ -1,17 +1,16 @@
 import re
 import math
 class LyricLine:
-    line_regex = re.compile(r'\[(?:(\d+):)?(\d+)(?:\.(\d+))?\]([^\[]+)')
     def __init__(self, text, min, sec, fraction):
         self.text = text
-        self.min = min
-        self.sec = sec
-        self.millis = int(fraction / 10**len(str(fraction)) * 1000)
+        self.minutes = min
+        self.seconds = sec
+        self.milliseconds = int(fraction / 10**len(str(fraction)) * 1000)
     def __str__(self):
-        display = f'{self.min:02}:{self.sec:02}.{self.millis:03}'
-        return f'[{display}]{self.text}'
-    def offset(self, min_offset=0, sec_offset=0, millis_offset=0):
-        self.min, self.sec, self.millis = self.to_time(self.to_millis(self.min + min_offset, self.sec + sec_offset, self.millis + millis_offset))
+        return f'[{self.minutes:02}:{self.seconds:02}.{self.milliseconds:03}]{self.text}'
+    def offset(self, minutes=0, seconds=0, milliseconds=0):
+        new_time_in_milliseconds = self.time_millis + self.to_millis(minutes, seconds, milliseconds)
+        self.minutes, self.seconds, self.milliseconds = self.to_min_sec_millis(new_time_in_milliseconds)
     @staticmethod
     def to_millis(m,s,mi):
         return m * 60 * 1000 + s * 1000 + mi
@@ -20,10 +19,10 @@ class LyricLine:
         return self.time_millis / 1000
     @property
     def time_millis(self):
-        return self.to_millis(self.min, self.sec, self.millis)
+        return self.to_millis(self.minutes, self.seconds, self.milliseconds)
         
     @staticmethod
-    def to_time(millis):
+    def to_min_sec_millis(millis):
         sign = 1
         if millis < 0:
             sign = -1
