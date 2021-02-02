@@ -2,7 +2,7 @@ README.md
 setup.py
 lrc_kit/__init__.py
 lrc_kit/line.py
-lrc_kit/lrc.py
+lrc_kit/lyrics.py
 lrc_kit/parser.py
 lrc_kit/providers.py
 lrc_kit.egg-info/PKG-INFO
@@ -11,4 +11,6 @@ lrc_kit.egg-info/dependency_links.txt
 lrc_kit.egg-info/requires.txt
 lrc_kit.egg-info/top_level.txt
 tests/__init__.py
+tests/test_line.py
 tests/test_main.py
+tests/test_parser.py

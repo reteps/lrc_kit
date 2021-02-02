@@ -1,6 +1,7 @@
 from lrc_kit.line import LyricLine, Word
 import re
 from base64 import b64decode
+import logging
 
 line_regex = re.compile(r'\[(?:(\d+):)?(\d+)(?:\.(\d+))?\]([^\[]+)')
 trc_word_regex = re.compile(r'<(\d*)>([^<]*)')
@@ -13,11 +14,14 @@ def dirty_int(integer):
 def parse_lyrics(lyrics, kind='lrc'):
     if kind == 'lrc':
         lines, metadata = parse_lrc(lyrics)
-    elif kind == 'trc':
+    elif kind == 'trc' or kind == 'xtrc':
+        # TODO xtrc translation
         lines, metadata = parse_trc(lyrics)
     elif kind == 'krc':
         lines, metadata = parse_krc(lyrics)
     else:
+        logging.warning(lyrics)
+        logging.warning(kind)
         raise NotImplementedError()
     metadata['kind'] = kind
     return lines, metadata

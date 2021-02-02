@@ -1,12 +1,29 @@
-from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, PROVIDERS
+from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, Flac123Provider, PROVIDERS
 import logging, os
 LOGGER = logging.getLogger(__name__)
+'''
 def test_kug():
     engine = KugouProvider()
     search = SearchRequest('周深', '归处')
     result = engine.search(search)
     result.export(os.path.join('files', 'kugou_test'))
-
+def test_flac():
+    engine = Flac123Provider()
+    search = SearchRequest('playboi carti', 'broke boi')
+    result = engine.search(search)
+    result.export(os.path.join('files', 'broke_boi'))
+'''
+def test_individual_success_multi_word():
+    search = SearchRequest('Playboi Carti', 'Broke Boi')
+    LOGGER.info(list(map(lambda p:p.name, PROVIDERS)))
+    for provider in PROVIDERS:
+        engine = provider()
+        result = engine.search(search)
+        if result != None:
+            result.export(os.path.join('files', f'{engine.name}_stan'))
+            LOGGER.info(engine.name + ' Success!')
+        else:
+            LOGGER.info(engine.name + " Fail :(")
 def test_individual_success():
     search = SearchRequest('eminem', 'stan')
     LOGGER.info(list(map(lambda p:p.name, PROVIDERS)))

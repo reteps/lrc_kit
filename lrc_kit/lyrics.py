@@ -3,7 +3,7 @@ import json
 
 class Lyrics:
     def __init__(self, lyrics, metadata={}, kind='lrc'):
-        self.kind = metadata.pop('kind', kind)
+        self.kind = metadata.get('kind', kind)
         if isinstance(lyrics, str):
             self.lyrics, self.metadata = parse_lyrics(lyrics, kind)
         else:
@@ -15,6 +15,7 @@ class Lyrics:
             line.offset(min_offset=minutes, sec_offset=seconds, millis_offset=milliseconds)
 
     def export(self, fp_or_str, extension=None):
+        self.metadata.pop('kind', None)
         if isinstance(fp_or_str, str):
             if extension is None:
                 extension = '.' + self.kind
