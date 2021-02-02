@@ -66,6 +66,10 @@ class ComboLyricsProvider(LyricsProvider):
         super().__init__(self.kwargs)
         if text_providers == None:
             self.providers = PROVIDERS
+        elif text_providers == 'EXTENDED':
+            self.providers = EXTENDED_PROVIDERS
+        elif text_providers == 'ALL':
+            self.providers = ALL_PROVIDERS
         else:
             self.providers = [provider for provider in PROVIDERS if provider.name in text_providers]
     def search(self, search_request):
@@ -206,8 +210,9 @@ class XiamiProvider(LyricsProvider):
         logging.debug('FETCHING Xiami')
         extension = lrc_url.split('.')[-1]
         logging.debug(f'Xiami KIND {extension}')
-        lyrics = Lyrics(lyric_text, kind=extension)
-        return lyrics
+        if extension in ['lrc', 'trc', 'xtrc']:
+            return Lyrics(lyric_text, kind=extension)
+        return None
 class QQProvider(LyricsProvider):
     name = 'QQ'
     def raw_search(self, search_request):
@@ -294,9 +299,11 @@ class Music163Provider(LyricsProvider):
             'tv': -1
         }
         l_resp = self.session.get(lyric_url, params=lyric_params).json()
-        lyric_text = l_resp['lrc']['lyric']
-        # TODO klyric support
-        return Lyrics(lyric_text)
+        lrc = l_resp.get('lrc')
+        if lrc:
+            lyric_text = lrc['lyric']
+            return Lyrics(lyric_text)
+        return None
 class SogeciProvider(LyricsProvider):
     name = 'Sogeci'
     def raw_search(self, search_request):
@@ -321,8 +328,9 @@ class SogeciProvider(LyricsProvider):
         lyric_page = self.session.get(lyric_url).text
         lyrics = re.search(lyric_regex, lyric_page).group(1)
         lyric_text = lyrics.strip()
-        return Lyrics(lyric_text)
-
+        if '[' in lyric_text and ']' in lyric_text:
+            return Lyrics(lyric_text)
+        return None
 class SyairProvider(LyricsProvider):
     name = 'Syair'
     def raw_search(self, search_request):
@@ -336,8 +344,8 @@ class SyairProvider(LyricsProvider):
             href = result[0]
             text = result[1]
             lrc_preview = result[2]
-            artist, song = text.replace('.lrc','').strip().split(' - ')
-            if (search_request.artist == artist.lower() or search_request.artist_normalized == artist.lower()) and search_request.song == song.lower():
+            artist, song = text.replace('.lrc','').strip().lower().split(' - ')
+            if (search_request.artist in artist or search_request.artist_normalized in artist) and search_request.song in song:
                 metadata = {
                     'ar': artist,
                     'ti': song
@@ -502,11 +510,23 @@ PROVIDERS = [
     QQProvider, 
     Music163Provider,
     SyairProvider,
-    LyricFindProvider,
+    RentanaAdvisorProvider,
+    MegalobizProvider
+]
+
+EXTENDED_PROVIDERS = [
+    SogeciProvider,
+    XiamiProvider,
+    QQProvider, 
+    Music163Provider,
+    SyairProvider,
     MooflacProvider,
     Flac123Provider,
     RentanaAdvisorProvider,
-    MegalobizProvider,
+    MegalobizProvider
 ]
 
-# KugouProvider,
+ALL_PROVIDERS = EXTENDED_PROVIDERS + [
+    LyricFindProvider,
+    KugouProvider
+]

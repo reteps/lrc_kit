@@ -30,6 +30,7 @@ def parse_trc(lyrics):
     for line in lines:
         word_timings = re.findall(trc_word_regex, line.text)
         words = list(map(lambda x: Word(int(x[0]), x[1]), word_timings))
+        line.text = ''.join(w.text for w in words)
         line.timing = words
     return lines, metadata
 def parse_lrc(lyrics):

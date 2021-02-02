@@ -6,6 +6,8 @@ import unicodedata
 import base64
 import zlib
 import json
+import html
+
 from abc import abstractmethod
 from lrc_kit.lyrics import Lyrics
 import logging
@@ -29,12 +31,13 @@ class LyricsProvider:
             val, meta = self.raw_search(search_request)
             if val:
                 lrc = self.fetch(val)
-                lrc.metadata['provider'] = self.name
-                logging.info(meta)
-                lrc.metadata = {**meta, **lrc.metadata}
-                if 'fetch' not in lrc.metadata:
-                    lrc.metadata['fetch'] = val
-                return lrc
+                if lrc:
+                    lrc.metadata['provider'] = self.name
+                    logging.info(meta)
+                    lrc.metadata = {**meta, **lrc.metadata}
+                    if 'fetch' not in lrc.metadata:
+                        lrc.metadata['fetch'] = val
+                    return lrc
             return None
         except Exception as e:
             logging.error(e)
@@ -63,6 +66,10 @@ class ComboLyricsProvider(LyricsProvider):
         super().__init__(self.kwargs)
         if text_providers == None:
             self.providers = PROVIDERS
+        elif text_providers == 'EXTENDED':
+            self.providers = EXTENDED_PROVIDERS
+        elif text_providers == 'ALL':
+            self.providers = ALL_PROVIDERS
         else:
             self.providers = [provider for provider in PROVIDERS if provider.name in text_providers]
     def search(self, search_request):
@@ -71,6 +78,57 @@ class ComboLyricsProvider(LyricsProvider):
             res = provider(**self.kwargs).search(search_request)
             if res:
                 return res
+        return None
+class Flac123Provider(LyricsProvider):
+    name = "Flac123"
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    def get_cookie_jar(self):
+        login_url = 'https://www.flac123.com/login'
+        res = self.session.get(login_url)
+        token_re = re.compile(r'name="_token" value="([^"]*)"')
+        token = re.search(token_re, res.text).group(1)
+        logging.debug('Token is' + str(token))
+        body = {
+            'email': 'peter.promotions.stenger@gmail.com',
+            'password': 'retep123',
+            '_token': token
+        }
+        return self.session.post(login_url, body, cookies=res.cookies).cookies
+    def raw_search(self, search_request):
+        logging.debug(search_request.as_string)
+        params = {
+            'kw': search_request.as_string
+        }
+        html = self.session.get('https://www.flac123.com/search', params=params).text
+        result_regex = re.compile(r'flex\">([\s\S]*?)<\/tr>')
+        pair_regex = re.compile(r'[f|s]=\"([^"]*)\">([^<]*)')
+        for result in re.findall(result_regex, html)[:10]:
+            result_html = result
+            # logging.debug(result_html)
+            pairs = re.findall(pair_regex, result_html)
+            song = pairs[0]
+            artists = pairs[1:-2]
+            album = pairs[-2][1]
+            logging.debug('{}={}'.format(song[1].lower(), ','.join([x[1].lower() for x in artists])))
+            if song[1].lower() == search_request.song and search_request.artist in [x[1].lower() for x in artists]:
+                return song[0], {
+                    'ti': song[1],
+                    'ar': artists[0][1],
+                    'al': album,
+                    'length': pairs[-1][1]
+                }
+        logging.debug('None found')
+        return None, None
+        # \s?<a href=\"([^"]*)\">([^<]*)[\s\S]*?href=\"([^"]*)\">([^<]*)[\s\S]*?href=\"([^"]*)\">([^<]*)[\s\S]*?muted">([^<]*)<\/td>\s?
+    def fetch(self, link):
+        result = self.session.get(link, cookies=self.get_cookie_jar()).text
+        lyric_regex = re.compile(r'id="lyric-original" class="d-none">([\s\S]*?)<\/div>')
+        text = re.search(lyric_regex, result)
+        if text:
+            full_text = html.unescape(text.group(1))
+            logging.debug(full_text)
+            return Lyrics(full_text)
         return None
 class KugouProvider(LyricsProvider):
     name = "Kugou"
@@ -152,8 +210,9 @@ class XiamiProvider(LyricsProvider):
         logging.debug('FETCHING Xiami')
         extension = lrc_url.split('.')[-1]
         logging.debug(f'Xiami KIND {extension}')
-        lyrics = Lyrics(lyric_text, kind=extension)
-        return lyrics
+        if extension in ['lrc', 'trc', 'xtrc']:
+            return Lyrics(lyric_text, kind=extension)
+        return None
 class QQProvider(LyricsProvider):
     name = 'QQ'
     def raw_search(self, search_request):
@@ -240,9 +299,11 @@ class Music163Provider(LyricsProvider):
             'tv': -1
         }
         l_resp = self.session.get(lyric_url, params=lyric_params).json()
-        lyric_text = l_resp['lrc']['lyric']
-        # TODO klyric support
-        return Lyrics(lyric_text)
+        lrc = l_resp.get('lrc')
+        if lrc:
+            lyric_text = lrc['lyric']
+            return Lyrics(lyric_text)
+        return None
 class SogeciProvider(LyricsProvider):
     name = 'Sogeci'
     def raw_search(self, search_request):
@@ -267,8 +328,9 @@ class SogeciProvider(LyricsProvider):
         lyric_page = self.session.get(lyric_url).text
         lyrics = re.search(lyric_regex, lyric_page).group(1)
         lyric_text = lyrics.strip()
-        return Lyrics(lyric_text)
-
+        if '[' in lyric_text and ']' in lyric_text:
+            return Lyrics(lyric_text)
+        return None
 class SyairProvider(LyricsProvider):
     name = 'Syair'
     def raw_search(self, search_request):
@@ -282,8 +344,8 @@ class SyairProvider(LyricsProvider):
             href = result[0]
             text = result[1]
             lrc_preview = result[2]
-            artist, song = text.replace('.lrc','').strip().split(' - ')
-            if (search_request.artist == artist.lower() or search_request.artist_normalized == artist.lower()) and search_request.song == song.lower():
+            artist, song = text.replace('.lrc','').strip().lower().split(' - ')
+            if (search_request.artist in artist or search_request.artist_normalized in artist) and search_request.song in song:
                 metadata = {
                     'ar': artist,
                     'ti': song
@@ -299,7 +361,7 @@ class SyairProvider(LyricsProvider):
         lyric_text = match.replace('<br>','')
         return Lyrics(lyric_text)
 class MooflacProvider(LyricsProvider):
-    name = 'mooflac'
+    name = 'Mooflac'
     def get_cookie_jar(self):
         login_url = 'https://www.mooflac.com/login'
         res = self.session.get(login_url)
@@ -311,7 +373,7 @@ class MooflacProvider(LyricsProvider):
             'password': 'retep123',
             '_token': token
         }
-        return requests.post(login_url, body, cookies=res.cookies).cookies
+        return self.session.post(login_url, body, cookies=res.cookies).cookies
     def __init__(self):
         super().__init__()
         self.cookies = self.get_cookie_jar()
@@ -419,6 +481,7 @@ class LyricFindProvider(LyricsProvider):
             'format': 'lrc',
             'lrckey': 'd829393a83c0c0434cef9d451310be4b'
         }
+        
         query = {
             'trackid': f'artistname:{search_request.artist},trackname:{search_request.song}'
         }
@@ -447,10 +510,23 @@ PROVIDERS = [
     QQProvider, 
     Music163Provider,
     SyairProvider,
-    LyricFindProvider,
-    MooflacProvider,
     RentanaAdvisorProvider,
-    MegalobizProvider,
+    MegalobizProvider
 ]
 
-# KugouProvider,
+EXTENDED_PROVIDERS = [
+    SogeciProvider,
+    XiamiProvider,
+    QQProvider, 
+    Music163Provider,
+    SyairProvider,
+    MooflacProvider,
+    Flac123Provider,
+    RentanaAdvisorProvider,
+    MegalobizProvider
+]
+
+ALL_PROVIDERS = EXTENDED_PROVIDERS + [
+    LyricFindProvider,
+    KugouProvider
+]

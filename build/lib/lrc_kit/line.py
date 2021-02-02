@@ -25,7 +25,7 @@ class Word:
         self.duration = duration
         self.offset = offset
     def __str__(self):
-        return f'<{self.duration}>{self.text}'
+        return f'{self.text}' # TODO export as TRC
 class LyricLine:
     def __init__(self, text, min, sec, fraction, timing=None):
         self.text = text
