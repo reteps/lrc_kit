@@ -1,6 +1,7 @@
-from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, Flac123Provider, PROVIDERS
+from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, Flac123Provider, MegalobizProvider, PROVIDERS
 import logging, os
 LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel('DEBUG')
 '''
 def test_kug():
     engine = KugouProvider()
@@ -13,6 +14,11 @@ def test_flac():
     result = engine.search(search)
     result.export(os.path.join('files', 'broke_boi'))
 '''
+def test_mega():
+    engine = MegalobizProvider()
+    search = SearchRequest('current joys', 'new flesh')
+    result = engine.search(search)
+    result.export(os.path.join('files', 'kids'))
 def test_individual_success_multi_word():
     search = SearchRequest('Playboi Carti', 'Broke Boi')
     LOGGER.info(list(map(lambda p:p.name, PROVIDERS)))

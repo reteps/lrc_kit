@@ -344,7 +344,7 @@ class SyairProvider(LyricsProvider):
             href = result[0]
             text = result[1]
             lrc_preview = result[2]
-            artist, song = text.replace('.lrc','').strip().lower().split(' - ')
+            artist, song = text.replace('.lrc','').strip().lower().split(' - ', 1)
             if (search_request.artist in artist or search_request.artist_normalized in artist) and search_request.song in song:
                 metadata = {
                     'ar': artist,
@@ -446,25 +446,23 @@ class MegalobizProvider(LyricsProvider):
     name = "Megalobiz"
     def raw_search(self, search_request):
         search_results = self.session.get("https://www.megalobiz.com/search/all", params={
-            "qry": search_request.as_string,
-            "display": "more"
+            "qry": search_request.as_string
+            # "display": "more"
         })
-        soup = BeautifulSoup(search_results.text, 'html.parser')
-        result_links = soup.find(id="list_entity_container").find_all("a", class_="entity_name")
-        logging.debug(f'{len(result_links)} ({self.name}) results')
-
-        for result_link in result_links:
-            lower_title = result_link.get_text().lower()
-            if search_request.artist in lower_title and search_request.song in lower_title:
-                url = "https://www.megalobiz.com" + result_link["href"]
-                return url, {}
+        search_regex = re.compile(r'<a c.*name=\"(.+)\"\s+.*\s+href=\"(.+)\" >')
+        matches = re.findall(search_regex, search_results.text)
+        for match in matches:
+            name = match[0].lower()
+            href = match[1]
+            if search_request.artist in name and search_request.song in name:
+                return "https://www.megalobiz.com" + href, {}
         return None, None
 
     def fetch(self, url):
-        possible_text = self.session.get(url)
-        soup = BeautifulSoup(possible_text.text, 'html.parser')
-
-        lyric_text = soup.find("div", class_="lyrics_details").span.get_text()
+        possible_text = self.session.get(url).text
+        lyrics_regex = re.compile(r'<span id=\"lrc_\d+_lyrics\"\s>([\s\S]+?)<\/span>')
+        lyrics = re.search(lyrics_regex,possible_text)
+        lyric_text = lyrics[1].replace('<br />','')
         return Lyrics(lyric_text)
 
 
