@@ -243,8 +243,7 @@ class QQProvider(LyricsProvider):
         }
         body = json.loads(self.session.get('https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg', params=params, headers=headers).text[18:-1])
         if body.get('lyric'):
-            lyric_text = base64.b64decode(body['lyric']).decode('utf-8')
-            logging.debug(lyric_text)
+            lyric_text = html.unescape(base64.b64decode(body['lyric']).decode('utf-8'))
             return Lyrics(lyric_text)
         return None
 
@@ -302,6 +301,7 @@ class Music163Provider(LyricsProvider):
         lrc = l_resp.get('lrc')
         if lrc:
             lyric_text = lrc['lyric']
+        
             return Lyrics(lyric_text)
         return None
 class SogeciProvider(LyricsProvider):
@@ -344,7 +344,10 @@ class SyairProvider(LyricsProvider):
             href = result[0]
             text = result[1]
             lrc_preview = result[2]
-            artist, song = text.replace('.lrc','').strip().lower().split(' - ', 1)
+            try:
+                artist, song = text.replace('.lrc','').strip().lower().split(' - ', 1)
+            except ValueError:
+                continue
             if (search_request.artist in artist or search_request.artist_normalized in artist) and search_request.song in song:
                 metadata = {
                     'ar': artist,
@@ -417,7 +420,7 @@ class RentanaAdvisorProvider(LyricsProvider):
 
         search_results = self.session.get("https://www.rentanadviser.com/en/subtitles/subtitles4songs.aspx", 
             params={'src': search_request.as_string})
-        soup = BeautifulSoup(search_results.text, 'html.parser')
+        soup = BeautifulSoup(search_results.text, 'lxml')
         result_links = soup.find(id="tablecontainer").find_all("a")
         logging.debug(f'{len(result_links)} ({self.name}) results')
 

@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="lrc_kit",
-    version="0.1.6.8",
+    version="0.1.6.9",
     author="Peter Stenger",
     author_email="peter.promotions.stenger@gmail.com",
     description="A library to search for LRC files online and parse their contents",
@@ -15,7 +15,8 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     install_requires=[
         'bs4',
-        'requests'
+        'requests',
+        'lxml'
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
