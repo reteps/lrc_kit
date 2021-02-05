@@ -1,8 +1,18 @@
 from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, Flac123Provider, MegalobizProvider, PROVIDERS
+import lrc_kit
 import logging, os
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel('DEBUG')
 
+def test_flac123():
+    engine = Flac123Provider()
+    res = engine.search(SearchRequest('Mk.Gee', 'You'))
+    res.export(os.path.join('files', 'you'))
+def test_custom():
+    providers = lrc_kit.MINIMAL_PROVIDERS + [lrc_kit.Flac123Provider]
+    engine = ComboLyricsProvider(providers)
+    res = engine.search(SearchRequest('Mk.Gee', 'You'))
+    res.export(os.path.join('files', 'you'))
 def test_mega():
     engine = MegalobizProvider()
     search = SearchRequest('current joys', 'kids')

@@ -61,17 +61,30 @@ class SearchRequest:
 
 class ComboLyricsProvider(LyricsProvider):
     name = "Combo"
-    def __init__(self, text_providers=None, **kwargs):
+    def __init__(self, providers=None, **kwargs):
         self.kwargs = kwargs
         super().__init__(self.kwargs)
-        if text_providers == None:
+        if providers == None:
             self.providers = PROVIDERS
-        elif text_providers == 'EXTENDED':
+        elif providers == 'EXTENDED':
             self.providers = EXTENDED_PROVIDERS
-        elif text_providers == 'ALL':
+        elif providers == 'MINIMAL':
+            self.providers = MINIMAL_PROVIDERS
+        elif providers == 'ALL':
             self.providers = ALL_PROVIDERS
         else:
-            self.providers = [provider for provider in PROVIDERS if provider.name in text_providers]
+            self.providers = []
+            provider_lookup = {provider.name: provider for provider in ALL_PROVIDERS}
+            for provider in providers:
+                if isinstance(provider, LyricsProvider):
+                    self.providers.append(provider)
+                elif isinstance(provider, str):
+                    if provider in provider_lookup:
+                        self.providers.append(provider_lookup[provider])
+                    else:
+                        raise ValueError('That provider does not exist.')
+                else:
+                    raise ValueError('Providers must all be "str" or "LyricsProvider".')
     def search(self, search_request):
         for provider in self.providers:
             logging.info(provider.name)
@@ -472,15 +485,20 @@ class MegalobizProvider(LyricsProvider):
 class LyricFindProvider(LyricsProvider):
     name = "LyricFind"
     # https://github.com/alan96320/camocist-radio/blob/7adcc4f0482b395d97ce296745fb475be7f98052/app/Http/Controllers/Frontend/ApiController.php#L141
-    # TODO retain lost metadata
+    def __init__(self, apikey=None, lrckey=None, **kwargs):
+        super().__init__(**kwargs)
+        self.apikey = apikey
+        self.lrckey = lrckey
+        if self.apikey is None or self.lrckey is None:
+            raise ValueError('APIKEY and LRCKEY must be provided.')
     def raw_search(self, search_request):
         base_params = {
-            'apikey': 'ac0974dcf282f1c67c64342159e42c05',
+            'apikey': self.apikey,
             'reqtype': 'default',
             'output': 'json',
             'territory': 'US',
             'format': 'lrc',
-            'lrckey': 'd829393a83c0c0434cef9d451310be4b'
+            'lrckey': self.lrckey
         }
         
         query = {
@@ -505,29 +523,24 @@ class LyricFindProvider(LyricsProvider):
         )
         return Lyrics(lyric_text)
 
-PROVIDERS = [
+MINIMAL_PROVIDERS = [
     SogeciProvider,
-    XiamiProvider,
-    QQProvider, 
-    Music163Provider,
     SyairProvider,
+    Music163Provider,
+    QQProvider,
+]
+PROVIDERS = MINIMAL_PROVIDERS + [
     RentanaAdvisorProvider,
     MegalobizProvider
 ]
 
-EXTENDED_PROVIDERS = [
-    SogeciProvider,
-    XiamiProvider,
-    QQProvider, 
-    Music163Provider,
-    SyairProvider,
-    MooflacProvider,
-    Flac123Provider,
-    RentanaAdvisorProvider,
-    MegalobizProvider
+EXTENDED_PROVIDERS = PROVIDERS + [
+    MooflacProvider, # Uses an email/password
+    Flac123Provider # Uses an email/password
 ]
 
 ALL_PROVIDERS = EXTENDED_PROVIDERS + [
-    LyricFindProvider,
-    KugouProvider
+    LyricFindProvider, # Requires a valid API Key
+    KugouProvider, # Provides little english lyrics
+    XiamiProvider # Was taken offline 2/4.
 ]

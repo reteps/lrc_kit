@@ -76,7 +76,7 @@ class ComboLyricsProvider(LyricsProvider):
             self.providers = []
             provider_lookup = {provider.name: provider for provider in ALL_PROVIDERS}
             for provider in providers:
-                if isinstance(provider, LyricsProvider):
+                if issubclass(provider, LyricsProvider):
                     self.providers.append(provider)
                 elif isinstance(provider, str):
                     if provider in provider_lookup:
@@ -84,7 +84,7 @@ class ComboLyricsProvider(LyricsProvider):
                     else:
                         raise ValueError('That provider does not exist.')
                 else:
-                    raise ValueError('Providers must all be "str" or "LyricsProvider".')
+                    raise ValueError(f'Provider "{provider}" be "str" or "LyricsProvider" (Not an instance).')
     def search(self, search_request):
         for provider in self.providers:
             logging.info(provider.name)
@@ -116,6 +116,7 @@ class Flac123Provider(LyricsProvider):
         html = self.session.get('https://www.flac123.com/search', params=params).text
         result_regex = re.compile(r'flex\">([\s\S]*?)<\/tr>')
         pair_regex = re.compile(r'[f|s]=\"([^"]*)\">([^<]*)')
+        possible_matches = []
         for result in re.findall(result_regex, html)[:10]:
             result_html = result
             # logging.debug(result_html)
@@ -125,24 +126,28 @@ class Flac123Provider(LyricsProvider):
             album = pairs[-2][1]
             logging.debug('{}={}'.format(song[1].lower(), ','.join([x[1].lower() for x in artists])))
             if song[1].lower() == search_request.song and search_request.artist in [x[1].lower() for x in artists]:
-                return song[0], {
+                possible_matches.append((song[0], {
                     'ti': song[1],
                     'ar': artists[0][1],
                     'al': album,
-                    'length': pairs[-1][1]
-                }
+                    'length': pairs[-1][1],
+                    'fetch': song[0]
+                }))
+        
+        for link, metadata in possible_matches:
+            result = self.session.get(link, cookies=self.get_cookie_jar()).text
+            lyric_regex = re.compile(r'id="lyric-original" class="d-none">([\s\S]*?)<\/div>')
+            text = re.search(lyric_regex, result)
+            if text:
+                return text, metadata
+
         logging.debug('None found')
         return None, None
         # \s?<a href=\"([^"]*)\">([^<]*)[\s\S]*?href=\"([^"]*)\">([^<]*)[\s\S]*?href=\"([^"]*)\">([^<]*)[\s\S]*?muted">([^<]*)<\/td>\s?
-    def fetch(self, link):
-        result = self.session.get(link, cookies=self.get_cookie_jar()).text
-        lyric_regex = re.compile(r'id="lyric-original" class="d-none">([\s\S]*?)<\/div>')
-        text = re.search(lyric_regex, result)
-        if text:
-            full_text = html.unescape(text.group(1))
-            logging.debug(full_text)
-            return Lyrics(full_text)
-        return None
+    def fetch(self, text):
+        full_text = html.unescape(text.group(1))
+        logging.debug(full_text)
+        return Lyrics(full_text)
 class KugouProvider(LyricsProvider):
     name = "Kugou"
     def raw_search(self, search_request):
