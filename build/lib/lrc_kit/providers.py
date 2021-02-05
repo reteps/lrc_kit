@@ -13,6 +13,9 @@ from lrc_kit.lyrics import Lyrics
 import logging
 # https://github.com/ddddxxx/LyricsKit/tree/master/Sources/LyricsService/Provider
 # https://github.com/blueset/project-lyricova/tree/master/packages/lyrics-kit
+
+def clean_text(text):
+    return text.split('(')[0].split('-')[0].strip().lower()
 class LyricsProvider:
     user_agent = {'user-agent': 'lrc_kit'}
     def __init__(self, session=None):
@@ -85,10 +88,11 @@ class ComboLyricsProvider(LyricsProvider):
                         raise ValueError('That provider does not exist.')
                 else:
                     raise ValueError(f'Provider "{provider}" be "str" or "LyricsProvider" (Not an instance).')
+        # Initialize Providers
+        self.providers = map(lambda p: p(**self.kwargs), self.providers)
     def search(self, search_request):
         for provider in self.providers:
-            logging.info(provider.name)
-            res = provider(**self.kwargs).search(search_request)
+            res = provider.search(search_request)
             if res:
                 return res
         return None
@@ -125,7 +129,7 @@ class Flac123Provider(LyricsProvider):
             artists = pairs[1:-2]
             album = pairs[-2][1]
             logging.debug('{}={}'.format(song[1].lower(), ','.join([x[1].lower() for x in artists])))
-            if song[1].lower() == search_request.song and search_request.artist in [x[1].lower() for x in artists]:
+            if (song[1].lower() == search_request.song or clean_text(song[1]) == search_request.song) and search_request.artist in [x[1].lower() for x in artists]:
                 possible_matches.append((song[0], {
                     'ti': song[1],
                     'ar': artists[0][1],
@@ -364,8 +368,10 @@ class SyairProvider(LyricsProvider):
             lrc_preview = result[2]
             try:
                 artist, song = text.replace('.lrc','').strip().lower().split(' - ', 1)
+                logging.debug(f'A:{artist} S:{song}')
             except ValueError:
                 continue
+            logging.debug(search_request.as_string)
             if (search_request.artist in artist or search_request.artist_normalized in artist) and search_request.song in song:
                 metadata = {
                     'ar': artist,

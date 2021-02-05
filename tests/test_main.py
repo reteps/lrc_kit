@@ -4,6 +4,11 @@ import logging, os
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel('DEBUG')
 
+def test_syair():
+    engine = lrc_kit.SyairProvider()
+    search = SearchRequest('Yung Gravy', 'Mr. Clean')
+    result = engine.search(search)
+    result.export(os.path.join('files', 'mr_clean'))
 def test_flac123():
     engine = Flac123Provider()
     res = engine.search(SearchRequest('Mk.Gee', 'You'))
