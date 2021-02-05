@@ -2,21 +2,10 @@ from lrc_kit import ComboLyricsProvider, SearchRequest, KugouProvider, Flac123Pr
 import logging, os
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel('DEBUG')
-'''
-def test_kug():
-    engine = KugouProvider()
-    search = SearchRequest('周深', '归处')
-    result = engine.search(search)
-    result.export(os.path.join('files', 'kugou_test'))
-def test_flac():
-    engine = Flac123Provider()
-    search = SearchRequest('playboi carti', 'broke boi')
-    result = engine.search(search)
-    result.export(os.path.join('files', 'broke_boi'))
-'''
+
 def test_mega():
     engine = MegalobizProvider()
-    search = SearchRequest('current joys', 'new flesh')
+    search = SearchRequest('current joys', 'kids')
     result = engine.search(search)
     result.export(os.path.join('files', 'kids'))
 def test_individual_success_multi_word():

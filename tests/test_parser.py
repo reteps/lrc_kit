@@ -16,7 +16,7 @@ def test_parser():
 
 def test_trc():
 
-    with open('files/Xiami_felly.lrc') as f:
+    with open('files/Xiami_felly.trc') as f:
         contents = f.read()
         lines, metadata = parse_lyrics(contents, kind='trc')
         lrc = Lyrics(lines, metadata)
