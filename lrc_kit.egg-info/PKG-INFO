@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: lrc-kit
-Version: 0.1.7.3
+Version: 0.1.7.3.5
 Summary: A library to search for LRC files online and parse their contents
 Home-page: https://github.com/reteps/lrc_kit
 Author: Peter Stenger
