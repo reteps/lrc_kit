@@ -47,8 +47,8 @@ class LyricsProvider:
 
 class SearchRequest:
     def __init__(self, artist, song, duration=None):
-        self.artist = artist.lower()
-        self.song = song.lower()
+        self.artist = artist.lower().strip()
+        self.song = song.lower().strip()
         self.duration = duration
     @property
     def as_string(self):

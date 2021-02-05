@@ -11,7 +11,7 @@ def test_syair():
     result.export(os.path.join('files', 'mr_clean'))
 def test_flac123():
     engine = Flac123Provider()
-    res = engine.search(SearchRequest('Mk.Gee', 'You'))
+    res = engine.search(SearchRequest('Dababy', 'Goin Baby'))
     res.export(os.path.join('files', 'you'))
 def test_custom():
     providers = lrc_kit.MINIMAL_PROVIDERS + [lrc_kit.Flac123Provider]
