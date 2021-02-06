@@ -284,7 +284,8 @@ class QQProvider(LyricsProvider):
         body = json.loads(self.session.get('https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg', params=params, headers=headers).text[18:-1])
         if body.get('lyric'):
             lyric_text = html.unescape(base64.b64decode(body['lyric']).decode('utf-8'))
-            return Lyrics(lyric_text)
+            if '[' in lyric_text and ']' in lyric_text:
+                return Lyrics(lyric_text)
         return None
 
 class GecimiLyricProvider(LyricsProvider):
