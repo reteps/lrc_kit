@@ -335,15 +335,15 @@ class Music163Provider(LyricsProvider):
         lyric_params = {
             'id': song_id,
             'lv': 1,
-            'kv': 1,
-            'tv': -1
+            # 'kv': 1, Include Klyrics
+            # 'tv': -1 Include Translyrics
         }
         l_resp = self.session.get(lyric_url, params=lyric_params).json()
         lrc = l_resp.get('lrc')
         if lrc:
             lyric_text = lrc['lyric']
-        
-            return Lyrics(lyric_text)
+            if '[' in lyric_text and ']' in lyric_text:
+                return Lyrics(lyric_text)
         return None
 class SogeciProvider(LyricsProvider):
     name = 'Sogeci'
