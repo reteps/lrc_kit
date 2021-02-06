@@ -4,25 +4,13 @@ import logging, os
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel('DEBUG')
 
-def test_syair():
-    engine = lrc_kit.SyairProvider()
-    search = SearchRequest('Yung Gravy', 'Mr. Clean')
-    result = engine.search(search)
-    result.export(os.path.join('files', 'mr_clean'))
-def test_flac123():
-    engine = Flac123Provider()
-    res = engine.search(SearchRequest('Dababy', 'Goin Baby'))
-    res.export(os.path.join('files', 'you'))
+
 def test_custom():
     providers = lrc_kit.MINIMAL_PROVIDERS + [lrc_kit.Flac123Provider]
     engine = ComboLyricsProvider(providers)
     res = engine.search(SearchRequest('Mk.Gee', 'You'))
     res.export(os.path.join('files', 'you'))
-def test_mega():
-    engine = MegalobizProvider()
-    search = SearchRequest('current joys', 'kids')
-    result = engine.search(search)
-    result.export(os.path.join('files', 'kids'))
+
 def test_individual_success_multi_word():
     search = SearchRequest('Playboi Carti', 'Broke Boi')
     LOGGER.info(list(map(lambda p:p.name, PROVIDERS)))

@@ -150,6 +150,29 @@ class Flac123Provider(LyricsProvider):
         full_text = html.unescape(text.group(1))
         logging.debug(full_text)
         return Lyrics(full_text)
+class KugeciProvider(LyricsProvider):
+    name = "Kugeci"
+    def raw_search(self, search_request):
+        params = {
+            'q': search_request.song
+        }
+        body = self.session.get('https://www.kugeci.com/search', params=params).text
+        result_regex = re.compile(r'href="https:\/\/www\.kugeci\.com\/song\/([^"]+)">(.+)\s<\/a><\/td>\s+<td>([\s\S]*?)<\/td>')
+        artist_regex = re.compile(r'">(.*)<')
+        matches = re.findall(result_regex, body)
+        for (id, song, artists) in matches:
+            if song.lower() == search_request.song:
+                all_artists = ','.join(re.findall(artist_regex, artists))
+                if search_request.artist in all_artists.lower():
+                    return f'https://www.kugeci.com/download/lrc/' + id, {
+                        'ti': song,
+                        'ar': all_artists
+                    }
+        return None, None
+    def fetch(self, link):
+        lyric_text = self.session.get(link).text
+        return Lyrics(lyric_text)
+
 class KugouProvider(LyricsProvider):
     name = "Kugou"
     def raw_search(self, search_request):
@@ -534,9 +557,10 @@ class LyricFindProvider(LyricsProvider):
 
 MINIMAL_PROVIDERS = [
     SogeciProvider,
-    SyairProvider,
     Music163Provider,
     QQProvider,
+    KugeciProvider,
+    SyairProvider, # Very slow, but contains most sources
 ]
 PROVIDERS = MINIMAL_PROVIDERS + [
     RentanaAdvisorProvider,
