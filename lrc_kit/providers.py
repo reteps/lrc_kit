@@ -63,6 +63,7 @@ class SearchRequest:
 class ComboLyricsProvider(LyricsProvider):
     name = "Combo"
     def __init__(self, providers=None, **kwargs):
+        # Providers are not initialized till search? possible problem?
         self.kwargs = kwargs
         super().__init__(self.kwargs)
         if providers == None:
@@ -86,18 +87,14 @@ class ComboLyricsProvider(LyricsProvider):
                         raise ValueError('That provider does not exist.')
                 else:
                     raise ValueError(f'Provider "{provider}" be "str" or "LyricsProvider" (Not an instance).')
-        # Initialize Providers
-        self.providers = map(lambda p: p(**self.kwargs), self.providers)
     def search(self, search_request):
         for provider in self.providers:
-            res = provider.search(search_request)
+            res = provider(**self.kwargs).search(search_request)
             if res:
                 return res
         return None
 class Flac123Provider(LyricsProvider):
     name = "Flac123"
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
     def get_cookie_jar(self):
         login_url = 'https://www.flac123.com/login'
         res = self.session.get(login_url)
@@ -422,10 +419,11 @@ class MooflacProvider(LyricsProvider):
             '_token': token
         }
         return self.session.post(login_url, body, cookies=res.cookies).cookies
-    def __init__(self):
-        super().__init__()
-        self.cookies = self.get_cookie_jar()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cookies = None
     def fetch(self, url):
+        self.cookies = self.get_cookie_jar()
         lyrics_page = self.session.get(url, cookies=self.cookies).text
         has_lyrics = 'lyric-context' in lyrics_page
         if not has_lyrics:
@@ -437,7 +435,7 @@ class MooflacProvider(LyricsProvider):
             return None
         return Lyrics(lrc_text)
     def raw_search(self, search_request):
-
+        assert self.cookies is not None
         search_page = self.session.get('https://www.mooflac.com/search', params={
             'q': search_request.song + ' ' + search_request.artist_normalized 
         }, cookies=self.cookies).text
@@ -517,8 +515,8 @@ class MegalobizProvider(LyricsProvider):
 class LyricFindProvider(LyricsProvider):
     name = "LyricFind"
     # https://github.com/alan96320/camocist-radio/blob/7adcc4f0482b395d97ce296745fb475be7f98052/app/Http/Controllers/Frontend/ApiController.php#L141
-    def __init__(self, apikey=None, lrckey=None, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, apikey=None, lrckey=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.apikey = apikey
         self.lrckey = lrckey
         if self.apikey is None or self.lrckey is None:
