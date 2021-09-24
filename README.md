@@ -10,3 +10,5 @@ search = SearchRequest('eminem', 'stan')
 result, engine_used = engine.search(search)
 result.export('stan.lrc')
 ```
+
+See some more advanced usage in my [real time lyrics](https://github.com/reteps/real-time-lyrics) project :)
